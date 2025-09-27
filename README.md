@@ -1,4 +1,4 @@
-# WanderSafe - Smart Tourist Safety Monitoring System  
+# 🌍WanderSafe - Smart Tourist Safety Monitoring System🌍  
 *A Submission for the Smart India Hackathon 2025 by Team MeowMeow*  
 
 ---
