@@ -1,0 +1,5 @@
+// This is an example file.
+// To use the app, create a copy of this file named 'api_keys.dart'
+// and replace the placeholder with your actual Gemini API key.
+
+const String geminiApiKey = "PASTE_YOUR_GEMINI_API_KEY_HERE";
