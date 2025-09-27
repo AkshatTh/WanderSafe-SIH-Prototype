@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Tourist Safety Monitoring & Incident Response System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        :root {
+            --map-bg: #1a2636;
+            --main-bg: #0f172a;
+            --sidebar-bg: #1e293b;
+            --card-bg: #293548;
+            --border-color: #475569;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --accent-blue: #3b82f6;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-yellow: #eab308;
+            --accent-green: #22c55e;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--main-bg);
+            color: var(--text-primary);
+        }
+
+        .map-grid-zone {
+            background-size: cover;
+            background-position: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .map-grid-zone:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
+        }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .pulsing-marker {
+            animation: pulse-red 2s infinite;
+        }
+        
+        .timeline-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--accent-blue);
+            cursor: pointer;
+            border-radius: 50%;
+            margin-top: -6px;
+        }
+        
+        .timeline-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: var(--accent-blue);
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--sidebar-bg); }
+        ::-webkit-scrollbar-thumb { background: #555; border-radius:4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #666; }
+
+        /* Added for toast notification */
+        #toast-notification {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        
+        /* Custom Leaflet Tooltip Styles for dark mode compatibility */
+        .custom-leaflet-tooltip {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            border: 1px solid #ccc !important;
+            color: #333 !important;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4) !important;
+            border-radius: 0.5rem !important; /* rounded-lg */
+        }
+        .custom-leaflet-tooltip .leaflet-tooltip-content {
+            padding: 0.25rem 0.5rem !important;
+        }
+        .leaflet-tooltip-top:before {
+            border-top-color: #ccc !important;
+        }
+        .leaflet-tooltip-top:after {
+             border-top-color: rgba(255, 255, 255, 0.9) !important;
+        }
+        .leaflet-marker-icon .leaflet-custom-icon {
+            background: transparent;
+            border: none;
+        }
+
+        /* Light theme for map controls */
+        .leaflet-control-zoom a, .leaflet-control-layers-toggle {
+            background-color: white !important;
+            color: black !important;
+            border-color: #ccc !important;
+        }
+        .leaflet-control-zoom a:hover, .leaflet-control-layers-toggle:hover {
+            background-color: #f4f4f4 !important;
+        }
+        .leaflet-control-layers {
+            background: white !important;
+            color: black !important;
+        }
+        /* Remove zoom control from dispatch map */
+        #dispatch-route-map .leaflet-control-zoom {
+            display: none;
+        }
+    </style>
+</head>
+<body class="overflow-hidden">
+
+    <div id="dashboard-wrapper" class="flex h-screen bg-slate-900 text-slate-100">
+        
+        <aside class="w-64 bg-slate-800 p-4 flex flex-col shrink-0">
+            <div class="flex items-center mb-8">
+                <div class="p-2 bg-blue-600 rounded-lg mr-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-check"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+                <h1 class="font-bold text-lg">Tourist Safety</h1>
+            </div>
+            <nav class="flex-1 space-y-2">
+                <a href="#" class="flex items-center gap-3 px-3 py-2 bg-slate-700 rounded-md font-semibold"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> Command Center</a>
+                <a href="#" class="flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-slate-700 rounded-md"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg> Alert Queue</a>
+                <a href="#" class="flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-slate-700 rounded-md"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg> Investigation Tools</a>
+                <a href="#" class="flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-slate-700 rounded-md"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M14 19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6l4 4v2"/><path d="M18 13a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3v-2a3 3 0 0 1 3-3Z"/><path d="m22 17-1.5-1.5"/><path d="M17 12v-1"/><path d="m14 15 1.5 1.5"/></svg> Reports</a>
+                <a href="#" class="flex items-center gap-3 px-3 py-2 text-slate-300 hover:bg-slate-700 rounded-md"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> System Settings</a>
+            </nav>
+            <div class="mt-auto">
+                 <div class="p-3 bg-slate-900 rounded-lg">
+                      <p class="text-sm font-semibold">HQ Command Center</p>
+                      <p class="text-xs text-slate-400">Role: Administrator</p>
+                 </div>
+            </div>
+        </aside>
+
+        <main id="main-content" class="flex-1 flex flex-col p-6 overflow-y-auto">
+            <header class="flex items-center justify-between mb-6">
+                 <div>
+                      <h2 class="text-2xl font-bold text-slate-50">Command Center Dashboard</h2>
+                      <p class="text-slate-400">Northeast India Region Overview</p>
+                 </div>
+                 <div class="flex items-center gap-4">
+                      <div class="relative">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                           <input type="text" placeholder="Search Tourist ID, Zone, Incident..." class="bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2 w-72 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      </div>
+                      <div class="flex items-center gap-2">
+                           <button id="layout-a" class="p-2 bg-blue-600 rounded-md" aria-label="Layout A: Map-first"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M9 21V9"/></svg></button>
+                           <button id="layout-b" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-md" aria-label="Layout B: Split View"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/></svg></button>
+                           <button id="layout-c" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-md" aria-label="Layout C: Multi-incident Grid"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 12h18"/><path d="M12 3v18"/></svg></button>
+                      </div>
+                 </div>
+            </header>
+
+            <div id="dashboard-view" class="flex-1 flex gap-6">
+                <div id="map-container" class="flex-1 rounded-xl bg-slate-800 p-4">
+                     <div id="map-grid-view" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-full">
+                         </div>
+                </div>
+
+                <div id="alert-queue-panel" class="w-96 bg-slate-800 rounded-xl p-4 flex-col hidden shrink-0">
+                     <h3 class="text-lg font-bold mb-4">Live Alert Queue</h3>
+                    <div class="space-y-3 overflow-y-auto">
+                         </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="fullscreen-map-modal" class="hidden fixed inset-0 bg-slate-900 z-50 flex flex-col p-4 gap-4">
+        <div class="flex items-center justify-between bg-slate-800/80 backdrop-blur-sm p-3 rounded-xl">
+             <div class="flex items-center gap-4">
+                 <button id="close-fullscreen-map" class="p-2 hover:bg-slate-700 rounded-full" aria-label="Close fullscreen map"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                <h2 id="fullscreen-map-title" class="text-xl font-bold">Zone: Tawang, Arunachal Pradesh</h2>
+             </div>
+             <div class="flex items-center gap-3 text-sm">
+                 <span id="anomaly-count" class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-red-500 pulsing-marker"></div>AI Anomalies: 3</span>
+                 <span id="tourist-count" class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-green-500"></div>Active Tourists: 127</span>
+             </div>
+        </div>
+
+        <div class="flex-1 flex gap-4 overflow-hidden">
+            <div class="w-56 bg-slate-800/80 backdrop-blur-sm p-4 rounded-xl flex flex-col">
+                <h4 class="font-bold mb-4">Map Layers</h4>
+                <div class="space-y-3 text-sm">
+                    <label class="flex items-center gap-2 cursor-pointer"><input id="layer-tourists" type="checkbox" class="accent-blue-500" checked> Tourist Clusters</label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input id="layer-anomalies" type="checkbox" class="accent-blue-500" checked> AI Anomalies</label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input id="layer-cctv" type="checkbox" class="accent-blue-500" checked> CCTV / Drone</label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input id="layer-police" type="checkbox" class="accent-blue-500" checked> Police Units</label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input id="layer-hospitals" type="checkbox" class="accent-blue-500" checked> Hospitals</label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="accent-blue-500"> Community Helpers</label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input id="layer-hazards" type="checkbox" class="accent-blue-500" checked> Terrain Hazards</label>
+                    <label class="flex items-center gap-2 cursor-pointer"><input id="layer-pings" type="checkbox" class="accent-blue-500" checked> Satellite / Offline Pings</label>
+                </div>
+            </div>
+
+            <div id="interactive-map" class="flex-1 bg-white rounded-xl relative overflow-hidden">
+                </div>
+
+            <div id="quick-action-card" class="w-96 bg-slate-800/80 backdrop-blur-sm p-4 rounded-xl flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out">
+                </div>
+        </div>
+        
+        <div id="timeline-panel" class="hidden bg-slate-800/80 backdrop-blur-sm p-4 rounded-xl">
+             <div class="flex items-center gap-4">
+                 <button id="timeline-play-pause" class="p-2 hover:bg-slate-700 rounded-full">
+                     <svg id="play-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polygon points="5 4 15 12 5 20 5 4"/></svg>
+                     <svg id="pause-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 hidden"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                 </button>
+                 <span id="timeline-start-time" class="text-sm font-mono">12:22 PM</span>
+                 <input id="timeline-slider" type="range" min="0" max="100" value="0" class="timeline-slider flex-1 h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer">
+                 <span id="timeline-end-time" class="text-sm font-mono">12:32 PM</span>
+                 <button class="p-2 bg-slate-700 text-xs rounded-md">Export Clip</button>
+             </div>
+        </div>
+    </div>
+    
+    <div id="modal-backdrop" class="hidden fixed inset-0 bg-black/60 z-[100] flex items-center justify-center">
+        <div id="dispatch-modal" class="hidden bg-slate-800 rounded-xl p-6 w-full max-w-2xl border border-slate-700 shadow-2xl">
+            <h3 id="dispatch-title" class="text-xl font-bold mb-1">Dispatch Confirmation</h3>
+            <p id="dispatch-subtitle" class="text-slate-400 mb-6">Confirm dispatch to assist a tourist.</p>
+            <div class="flex gap-6">
+                <div class="w-1/2 bg-slate-900 rounded-lg p-4">
+                    <h4 class="font-semibold mb-3">Suggested Unit:</h4>
+                    <div class="space-y-3 text-sm">
+                        <p><strong>Type:</strong> Community Helper (First Responder)</p>
+                        <p><strong>Name:</strong> Pema Wangchuk</p>
+                        <p><strong>Unit ID:</strong> CH-TAW-07</p>
+                        <p><strong>Resources:</strong> First-Aid Kit, Radio</p>
+                        <p class="text-green-400"><strong>Status:</strong> Available & On-duty</p>
+                    </div>
+                </div>
+                <div class="w-1/2 bg-slate-900 rounded-lg p-4 flex flex-col">
+                    <h4 class="font-semibold mb-2">Terrain-Aware Route & ETA</h4>
+                    <div id="dispatch-route-map" class="flex-1 h-32 rounded bg-slate-700">
+                        </div>
+                    <div class="mt-3 text-center">
+                        <p class="text-2xl font-bold text-blue-400">ETA: 18 mins</p>
+                        <p class="text-xs text-slate-400">Mode: 1.2km Jeep + 0.5km Foot Trail (Moderate)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+               <button onclick="hideModal()" class="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600">Cancel</button>
+               <button onclick="confirmDispatch()" class="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 font-semibold">Confirm Dispatch</button>
+            </div>
+        </div>
+
+        <div id="offline-modal" class="hidden bg-slate-800 rounded-xl p-6 w-full max-w-lg border border-slate-700 shadow-2xl">
+            <h3 class="text-xl font-bold mb-1">Offline Connectivity Detected</h3>
+            <p class="text-slate-400 mb-6">The tourist's device is offline. Use fallback communication methods.</p>
+            <div class="space-y-3">
+                <button onclick="showToast('Satellite SMS Relay sent.')" class="w-full text-left p-3 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-blue-400"><path d="M12 22a10 10 0 1 0-8.66-17.32l-1.42 1.42a.5.5 0 0 0 .71.71l1.65-1.65a1 1 0 0 1 1.41 0l1.65 1.65a.5.5 0 0 0 .71-.71l-1.42-1.42A10 10 0 0 0 12 22z"/><path d="M18 12.5a6 6 0 1 0-10.4 4.5"/><path d="m12 12-2 4 4-2-4-2 2-4"/></svg>
+                    <span>Send Satellite SMS Relay</span>
+                </button>
+                <button onclick="showToast('Radio ping queued.')" class="w-full text-left p-3 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-yellow-400"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M16.5 10a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0z"/><path d="M12 12v10"/></svg>
+                    <span>Queue Radio Ping (Template: Distress)</span>
+                </button>
+                <button onclick="showToast('Push notification queued for network restore.')" class="w-full text-left p-3 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-green-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                    <span>Auto-queue Push Notification for Network Restore</span>
+                </button>
+            </div>
+             <div class="mt-6 flex justify-end">
+                 <button onclick="hideModal()" class="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600">Close</button>
+            </div>
+        </div>
+
+    </div>
+    
+    <div id="toast-notification" class="hidden fixed bottom-5 right-5 bg-slate-700 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 transform translate-y-2">
+        Toast message
+    </div>
+
+
+    <script>
+        // --- MOCK DATA ---
+        const zones = [
+            { id: 1, name: 'Tawang, Arunachal Pradesh', image: 'place1.jpg', alerts: 1, tourists: 3, center: [27.5879, 91.8611] },
+            { id: 2, name: 'Kaziranga, Assam', image: 'place2.jpg', alerts: 0, tourists: 5, center: [26.6375, 93.3644] },
+            { id: 3, name: 'Shillong, Meghalaya', image: 'place3.jpg', alerts: 1, tourists: 4, center: [25.5788, 91.8933] },
+            { id: 4, name: 'Dzukou Valley, Nagaland', image: 'place4.jpg', alerts: 2, tourists: 2, center: [25.5914, 94.0336] },
+            { id: 5, name: 'Loktak Lake, Manipur', image: 'place5.jpg', alerts: 0, tourists: 3, center: [24.5496, 93.8115] },
+            { id: 6, name: 'Unakoti, Tripura', image: 'place6.jpg', alerts: 0, tourists: 2, center: [24.0683, 92.0531] },
+        ];
+
+        const alerts = [
+            { id: 1, severity: 'Critical', touristId: 'T0451B', zone: 'Tawang, Arunachal Pradesh', type: 'Prolonged Inactivity', time: '2 mins ago' },
+            { id: 2, severity: 'High', touristId: 'N1123A', zone: 'Dzukou Valley, Nagaland', type: 'Route Deviation', time: '15 mins ago' },
+            { id: 3, severity: 'Medium', touristId: 'M2876C', zone: 'Shillong, Meghalaya', type: 'Abnormal Biometrics', time: '28 mins ago' },
+            { id: 4, severity: 'Info', touristId: 'N1124B', zone: 'Dzukou Valley, Nagaland', type: 'Lost Connectivity', time: '45 mins ago' },
+        ];
+        
+        const communityHelpers = {
+            'CH-TAW-07': { name: 'Pema Wangchuk', pos: { lat: 27.5845, lng: 91.8680 } }
+        };
+        
+        // --- Zone-Specific Data ---
+        const allZoneData = {
+            1: { // Tawang
+                tourists: [
+                    { 
+                        id: 'T0451B', name: 'Ananya Sharma', safetyScore: 25, lastPing: '12:32 PM', anomaly: 'Prolonged Inactivity', 
+                        pos: { lat: 27.5890, lng: 91.8650 }, medical: 'Asthma', contacts: ['+919876543210'],
+                        track: [
+                            { lat: 27.5875, lng: 91.8615, time: '12:22:00 PM' },
+                            { lat: 27.5878, lng: 91.8620, time: '12:23:00 PM' },
+                            { lat: 27.5882, lng: 91.8628, time: '12:24:00 PM' },
+                            { lat: 27.5885, lng: 91.8635, time: '12:25:00 PM' },
+                            { lat: 27.5888, lng: 91.8640, time: '12:26:00 PM' },
+                            { lat: 27.5890, lng: 91.8642, time: '12:27:00 PM' },
+                            { lat: 27.5891, lng: 91.8645, time: '12:28:00 PM' },
+                            { lat: 27.5892, lng: 91.8648, time: '12:29:00 PM' },
+                            { lat: 27.5891, lng: 91.8650, time: '12:30:00 PM' },
+                            { lat: 27.5890, lng: 91.8650, time: '12:31:00 PM' },
+                            { lat: 27.5890, lng: 91.8650, time: '12:32:00 PM' }
+                        ]
+                    },
+                    { id: 'T0452C', name: 'Rohan Verma', safetyScore: 92, lastPing: '12:35 PM', anomaly: null, pos: { lat: 27.5865, lng: 91.8600 }, medical: 'None', contacts: [] },
+                    { id: 'A0887D', name: 'Priya Das', safetyScore: 88, lastPing: '12:34 PM', anomaly: null, pos: { lat: 27.5880, lng: 91.8625 }, medical: 'None', contacts: [] },
+                ],
+                police: [ { id: 'PS01', name: 'Tawang Police Station', pos: { lat: 27.5850, lng: 91.8580 } } ],
+                hospitals: [ { id: 'HOS01', name: 'District Hospital', pos: { lat: 27.5830, lng: 91.8640 } } ],
+                cctv: [ { id: 'CCTV01', name: 'Monastery Gate Cam', pos: { lat: 27.5895, lng: 91.8660 } } ],
+                hazards: [ { id: 'HZ01', name: 'Landslide Prone Zone', pos: { lat: 27.5910, lng: 91.8700 } } ],
+                pings: []
+            },
+            2: { // Kaziranga
+                tourists: [
+                    { id: 'K011A', name: 'Vijay Singh', safetyScore: 95, lastPing: '12:38 PM', anomaly: null, pos: { lat: 26.6380, lng: 93.3650 }, medical: 'None', contacts: [] },
+                    { id: 'K012B', name: 'Meera Patel', safetyScore: 98, lastPing: '12:39 PM', anomaly: null, pos: { lat: 26.6370, lng: 93.3630 }, medical: 'None', contacts: [] },
+                    { id: 'K013C', name: 'Arjun Reddy', safetyScore: 91, lastPing: '12:37 PM', anomaly: null, pos: { lat: 26.6390, lng: 93.3660 }, medical: 'None', contacts: [] },
+                    { id: 'K014D', name: 'Sunita Rao', safetyScore: 94, lastPing: '12:38 PM', anomaly: null, pos: { lat: 26.6360, lng: 93.3620 }, medical: 'None', contacts: [] },
+                    { id: 'K015E', name: 'Rajesh Kumar', safetyScore: 96, lastPing: '12:39 PM', anomaly: null, pos: { lat: 26.6350, lng: 93.3610 }, medical: 'None', contacts: [] }
+                ],
+                police: [ { id: 'PS02', name: 'Kohora Range Office', pos: { lat: 26.6355, lng: 93.3605 } } ],
+                hospitals: [ { id: 'HOS02', name: 'Kaziranga Health Center', pos: { lat: 26.6345, lng: 93.3595 } } ],
+                cctv: [ { id: 'CCTV02', name: 'Watchtower 3 Cam', pos: { lat: 26.6400, lng: 93.3680 } } ],
+                hazards: [ { id: 'HZ02', name: 'Rhino Crossing Zone', pos: { lat: 26.6330, lng: 93.3580 } } ],
+                pings: []
+            },
+             3: { // Shillong
+                tourists: [
+                    { 
+                        id: 'M2876C', name: 'David K.', safetyScore: 68, lastPing: '12:10 PM', anomaly: 'Abnormal Biometrics', 
+                        pos: { lat: 25.5790, lng: 91.8940 }, medical: 'Hypertension', contacts: [],
+                        track: [
+                            { lat: 25.5780, lng: 91.8930, time: '12:00:00 PM' },
+                            { lat: 25.5782, lng: 91.8932, time: '12:02:00 PM' },
+                            { lat: 25.5785, lng: 91.8935, time: '12:04:00 PM' },
+                            { lat: 25.5788, lng: 91.8938, time: '12:06:00 PM' },
+                            { lat: 25.5790, lng: 91.8940, time: '12:08:00 PM' },
+                            { lat: 25.5790, lng: 91.8940, time: '12:10:00 PM' }
+                        ]
+                    },
+                    { id: 'M2877D', name: 'Emily Lyngdoh', safetyScore: 95, lastPing: '12:36 PM', anomaly: null, pos: { lat: 25.5780, lng: 91.8920 }, medical: 'None', contacts: [] },
+                    { id: 'M2878E', name: 'Sanjay Thapa', safetyScore: 92, lastPing: '12:35 PM', anomaly: null, pos: { lat: 25.5770, lng: 91.8910 }, medical: 'None', contacts: [] },
+                    { id: 'M2879F', name: 'Pooja Barua', safetyScore: 99, lastPing: '12:38 PM', anomaly: null, pos: { lat: 25.5760, lng: 91.8900 }, medical: 'None', contacts: [] }
+                ],
+                police: [ { id: 'PS03', name: 'Police Bazaar Station', pos: { lat: 25.5750, lng: 91.8890 } } ],
+                hospitals: [ { id: 'HOS03', name: 'Shillong Civil Hospital', pos: { lat: 25.5740, lng: 91.8880 } } ],
+                cctv: [ { id: 'CCTV03', name: 'Don Bosco Square', pos: { lat: 25.5800, lng: 91.8950 } } ],
+                hazards: [ { id: 'HZ03', name: 'Slippery Road (Wet)', pos: { lat: 25.5810, lng: 91.8960 } } ],
+                pings: []
+            },
+            4: { // Dzukou Valley
+                tourists: [
+                    { 
+                        id: 'N1123A', name: 'Alok Nath', safetyScore: 45, lastPing: '12:20 PM', anomaly: 'Route Deviation', 
+                        pos: { lat: 25.5920, lng: 94.0340 }, medical: 'None', contacts: [],
+                        track: [
+                            { lat: 25.5900, lng: 94.0320, time: '12:10:00 PM' },
+                            { lat: 25.5905, lng: 94.0325, time: '12:12:00 PM' },
+                            { lat: 25.5910, lng: 94.0330, time: '12:14:00 PM' },
+                            { lat: 25.5913, lng: 94.0333, time: '12:16:00 PM' },
+                            { lat: 25.5917, lng: 94.0337, time: '12:18:00 PM' },
+                            { lat: 25.5920, lng: 94.0340, time: '12:20:00 PM' }
+                        ]
+                    },
+                    // --- THIS IS THE NEW DATA YOU NEED TO ADD ---
+                    { 
+                        id: 'N1124B', name: 'Sunita Giri', safetyScore: 75, lastPing: '11:50 AM', anomaly: 'Lost Connectivity', 
+                        pos: { lat: 25.5950, lng: 94.0380 }, medical: 'None', contacts: [] 
+                    },
+                    // -----------------------------------------
+                    { id: 'N1125C', name: 'Ritika Sharma', safetyScore: 85, lastPing: '12:30 PM', anomaly: null, pos: { lat: 25.5900, lng: 94.0320 }, medical: 'None', contacts: [] }
+                ],
+                police: [ { id: 'PS04', name: 'Forest Guard Post', pos: { lat: 25.5890, lng: 94.0310 } } ],
+                hospitals: [ { id: 'HOS04', name: 'Trekker First Aid', pos: { lat: 25.5880, lng: 94.0300 } } ],
+                cctv: [],
+                hazards: [ { id: 'HZ04', name: 'Steep Trail Section', pos: { lat: 25.5930, lng: 94.0350 } } ],
+                pings: [ { id: 'SP01', name: 'N1124B Last Ping (45m ago)', pos: { lat: 25.5950, lng: 94.0380 } } ]
+            },
+             5: { // Loktak Lake
+                tourists: [
+                    { id: 'L551A', name: 'Suresh Iyer', safetyScore: 97, lastPing: '12:39 PM', anomaly: null, pos: { lat: 24.5500, lng: 93.8120 }, medical: 'None', contacts: [] },
+                    { id: 'L552B', name: 'Anjali Menon', safetyScore: 98, lastPing: '12:40 PM', anomaly: null, pos: { lat: 24.5480, lng: 93.8100 }, medical: 'None', contacts: [] },
+                    { id: 'L553C', name: 'Biren Singh', safetyScore: 96, lastPing: '12:38 PM', anomaly: null, pos: { lat: 24.5470, lng: 93.8090 }, medical: 'None', contacts: [] }
+                ],
+                police: [ { id: 'PS05', name: 'Lake Patrol Unit', pos: { lat: 24.5460, lng: 93.8080 } } ],
+                hospitals: [ { id: 'HOS05', name: 'Moirang Clinic', pos: { lat: 24.5450, lng: 93.8070 } } ],
+                cctv: [ { id: 'CCTV05', name: 'Sendra Viewpoint', pos: { lat: 24.5510, lng: 93.8130 } } ],
+                hazards: [ { id: 'HZ05', name: 'Deep Water Area', pos: { lat: 24.5520, lng: 93.8140 } } ],
+                pings: []
+            },
+            6: { // Unakoti
+                tourists: [
+                    { id: 'U881X', name: 'Deb Roy', safetyScore: 99, lastPing: '12:41 PM', anomaly: null, pos: { lat: 24.0690, lng: 92.0540 }, medical: 'None', contacts: [] },
+                    { id: 'U882Y', name: 'Ishita Paul', safetyScore: 97, lastPing: '12:40 PM', anomaly: null, pos: { lat: 24.0670, lng: 92.0520 }, medical: 'None', contacts: [] }
+                ],
+                police: [ { id: 'PS06', name: 'Tourist Police Kiosk', pos: { lat: 24.0660, lng: 92.0510 } } ],
+                hospitals: [ { id: 'HOS06', name: 'Kailashahar Hospital', pos: { lat: 24.0650, lng: 92.0500 } } ],
+                cctv: [ { id: 'CCTV06', name: 'Site Entrance', pos: { lat: 24.0700, lng: 92.0550 } } ],
+                hazards: [ { id: 'HZ06', name: 'Uneven Rock Stairs', pos: { lat: 24.0710, lng: 92.0560 } } ],
+                pings: []
+            },
+        };
+
+
+        const severityMap = {
+            'Critical': 'bg-red-500', 'High': 'bg-orange-500', 'Medium': 'bg-yellow-500', 'Info': 'bg-green-500'
+        };
+        const severityTextMap = {
+            'Critical': 'text-red-400', 'High': 'text-orange-400', 'Medium': 'text-yellow-400', 'Info': 'text-green-400'
+        };
+        const severityBorderMap = {
+            'Critical': 'border-red-500', 'High': 'border-orange-500', 'Medium': 'border-yellow-500', 'Info': 'border-green-500'
+        };
+
+
+        // --- DOM ELEMENTS & STATE ---
+        const mapGridView = document.getElementById('map-grid-view');
+        const alertQueuePanel = document.getElementById('alert-queue-panel').querySelector('div');
+        const fullscreenModal = document.getElementById('fullscreen-map-modal');
+        const quickActionCard = document.getElementById('quick-action-card');
+        const timelinePanel = document.getElementById('timeline-panel');
+        const modalBackdrop = document.getElementById('modal-backdrop');
+        const dispatchModal = document.getElementById('dispatch-modal');
+        const offlineModal = document.getElementById('offline-modal');
+        const toastElement = document.getElementById('toast-notification');
+        
+        let toastTimeout;
+        let map; 
+        let dispatchMap; 
+        let touristLayer, policeLayer, hospitalLayer, cctvLayer, hazardLayer, pingsLayer, anomalyLayer;
+        let touristMarkers = {};
+        let timelineInterval = null;
+        let selectedTouristForTimeline = null;
+
+
+        // --- POPULATION FUNCTIONS ---
+        function populateZoneGrid() {
+            mapGridView.innerHTML = zones.map(zone => `
+                <div class="map-grid-zone rounded-lg p-4 flex flex-col justify-end text-white cursor-pointer shadow-lg border border-slate-700" 
+                     style="background-image: linear-gradient(to top, rgba(0,0,0,0.8), transparent), url('${zone.image}')"
+                     onclick="openFullscreenMap('${zone.name}')">
+                    <h3 class="font-bold text-lg">${zone.name}</h3>
+                    <div class="text-sm flex items-center justify-between mt-1 opacity-80">
+                        <span>${zone.tourists} Tourists</span>
+                        ${zone.alerts > 0 ? `<span class="flex items-center gap-2 font-semibold text-red-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg> ${zone.alerts} Alerts</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function populateAlertQueue() {
+            alertQueuePanel.innerHTML = alerts.map(alert => `
+                <div class="bg-slate-900 p-3 rounded-lg border-l-4 ${severityBorderMap[alert.severity]}">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-bold ${severityTextMap[alert.severity]}">${alert.type}</p>
+                            <p class="text-sm text-slate-300">ID: ${alert.touristId} | Zone: ${alert.zone.split(',')[0]}</p>
+                        </div>
+                        <span class="text-xs text-slate-400">${alert.time}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function populateIncidentGrid() {
+            mapGridView.innerHTML = alerts.map(alert => {
+                // Find the tourist data to get their coordinates
+                let incidentTourist = null;
+                Object.values(allZoneData).find(zone => 
+                    zone.tourists.some(t => {
+                        if (t.id === alert.touristId) {
+                            incidentTourist = t;
+                            return true;
+                        }
+                        return false;
+                    })
+                );
+
+                // Default content for the div
+                let mapContent = `<div class="w-full h-full flex items-center justify-center bg-slate-700 text-slate-400">Location Data Missing</div>`;
+                
+                if (incidentTourist && incidentTourist.pos) {
+                    const lat = incidentTourist.pos.lat;
+                    const lng = incidentTourist.pos.lng;
+                    
+                    // Define a small bounding box around the marker for the iframe view
+                    const boxSize = 0.01;
+                    const lon1 = lng - boxSize;
+                    const lat1 = lat - boxSize;
+                    const lon2 = lng + boxSize;
+                    const lat2 = lat + boxSize;
+
+                    // This is the new, unblockable iframe URL from OpenStreetMap
+                    const iframeUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${lon1},${lat1},${lon2},${lat2}&layer=mapnik&marker=${lat},${lng}`;
+                    
+                    // The iframe tag replaces the img tag
+                    mapContent = `<iframe width="100%" height="100%" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" src="${iframeUrl}" style="border: 0;"></iframe>`;
+                }
+                
+                return `
+                    <div class="bg-slate-900 rounded-lg p-4 flex flex-col gap-3 border-l-4 ${severityBorderMap[alert.severity]}">
+                        <div>
+                            <div class="flex justify-between items-center">
+                                <h4 class="font-bold ${severityTextMap[alert.severity]}">${alert.type}</h4>
+                                <span class="text-xs text-slate-400">${alert.time}</span>
+                            </div>
+                            <p class="text-sm text-slate-300">ID: ${alert.touristId} | Zone: ${alert.zone}</p>
+                        </div>
+                        
+                        <div class="h-32 rounded overflow-hidden">
+                           ${mapContent}
+                        </div>
+
+                        <div class="flex gap-2 mt-auto">
+                            <button class="flex-1 px-3 py-2 text-sm rounded-md bg-blue-600 hover:bg-blue-700 font-semibold" onclick="openFullscreenMap('${alert.zone}')">Investigate</button>
+                            <button class="px-3 py-2 text-sm rounded-md bg-slate-700 hover:bg-slate-600" onclick="showToast('Alert for ${alert.touristId} acknowledged.')">Acknowledge</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function initializeDashboard() {
+            populateZoneGrid();
+            populateAlertQueue();
+        }
+
+        // --- MAP FUNCTIONS ---
+        function initializeInteractiveMap(zoneId) {
+            const zone = zones.find(z => z.id === zoneId);
+            const centerCoords = zone ? zone.center : [26.75, 92.5]; 
+
+            if (map) map.remove();
+            
+            map = L.map('interactive-map').setView(centerCoords, 13);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            touristLayer = L.layerGroup();
+            anomalyLayer = L.layerGroup();
+            policeLayer = L.layerGroup();
+            hospitalLayer = L.layerGroup();
+            cctvLayer = L.layerGroup();
+            hazardLayer = L.layerGroup();
+            pingsLayer = L.layerGroup();
+
+            if (document.getElementById('layer-tourists').checked) touristLayer.addTo(map);
+            if (document.getElementById('layer-anomalies').checked) anomalyLayer.addTo(map);
+            if (document.getElementById('layer-police').checked) policeLayer.addTo(map);
+            if (document.getElementById('layer-hospitals').checked) hospitalLayer.addTo(map);
+            if (document.getElementById('layer-cctv').checked) cctvLayer.addTo(map);
+            if (document.getElementById('layer-hazards').checked) hazardLayer.addTo(map);
+            if (document.getElementById('layer-pings').checked) pingsLayer.addTo(map);
+            
+            setTimeout(() => {
+                map.invalidateSize();
+                populateMapMarkers(zoneId);
+            }, 100);
+        }
+        
+        function initializeDispatchMap(tourist, unit) {
+            const touristLatLng = [tourist.pos.lat, tourist.pos.lng];
+            const unitLatLng = [unit.pos.lat, unit.pos.lng];
+
+            if (dispatchMap) dispatchMap.remove();
+
+            dispatchMap = L.map('dispatch-route-map', { zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false }).setView(touristLatLng, 14);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap',
+                maxZoom: 19
+            }).addTo(dispatchMap);
+
+            const touristIcon = L.divIcon({
+                html: `<div class="w-6 h-6 rounded-full border-2 bg-red-500 border-white pulsing-marker"></div>`,
+                className: 'leaflet-custom-icon', iconSize: [24, 24], iconAnchor: [12, 12]
+            });
+
+            const unitIcon = L.divIcon({
+                html: `<div class="w-6 h-6 rounded-full border-2 bg-green-600 border-white flex items-center justify-center text-white font-bold text-xs">R</div>`,
+                className: 'leaflet-custom-icon', iconSize: [24, 24], iconAnchor: [12, 12]
+            });
+            
+            L.marker(touristLatLng, { icon: touristIcon }).addTo(dispatchMap);
+            L.marker(unitLatLng, { icon: unitIcon }).addTo(dispatchMap);
+            
+            const routeLine = L.polyline([touristLatLng, unitLatLng], { color: '#3b82f6', weight: 3, dashArray: '5, 5' }).addTo(dispatchMap);
+            
+            dispatchMap.fitBounds(routeLine.getBounds().pad(0.2));
+
+            setTimeout(() => dispatchMap.invalidateSize(), 100);
+        }
+
+        function populateMapMarkers(zoneId) {
+            const data = allZoneData[zoneId];
+            if (!data) return;
+
+            [touristLayer, anomalyLayer, policeLayer, hospitalLayer, cctvLayer, hazardLayer, pingsLayer].forEach(layer => layer.clearLayers());
+            touristMarkers = {};
+            
+            const iconFactory = (svg, colorClass, textColor = 'white') => L.divIcon({
+                html: `<div class="w-6 h-6 rounded-md flex items-center justify-center ${colorClass} border-2 border-white text-${textColor}">${svg}</div>`,
+                className: 'leaflet-custom-icon', iconSize: [24, 24], iconAnchor: [12, 12]
+            });
+            const criticalIcon = L.divIcon({
+                html: `<div class="w-6 h-6 rounded-full border-2 bg-red-500 border-white pulsing-marker"></div>`,
+                className: 'leaflet-custom-icon', iconSize: [24, 24], iconAnchor: [12, 12]
+            });
+            const normalIcon = L.divIcon({
+                html: `<div class="w-6 h-6 rounded-full border-2 bg-blue-500 border-white"></div>`,
+                className: 'leaflet-custom-icon', iconSize: [24, 24], iconAnchor: [12, 12]
+            });
+            const policeIcon = iconFactory(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`, 'bg-blue-800');
+            const hospitalIcon = iconFactory(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>`, 'bg-white', 'red-600');
+            const cctvIcon = iconFactory(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2"/><path d="m22 8-6 4 6 4V8z"/></svg>`, 'bg-gray-600');
+            const hazardIcon = iconFactory(`<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`, 'bg-yellow-500', 'black');
+            const pingsIcon = L.divIcon({
+                html: `<div class="w-4 h-4 rounded-full bg-blue-400 opacity-75"></div>`,
+                className: 'leaflet-custom-icon', iconSize: [16, 16], iconAnchor: [8, 8]
+            });
+
+            const addMarkersToLayer = (items, icon, layer, tooltipField) => {
+                 items.forEach(item => {
+                     const marker = L.marker([item.pos.lat, item.pos.lng], { icon });
+                     marker.bindTooltip(item[tooltipField], { direction: 'top', offset: [0, -12], className: 'custom-leaflet-tooltip' });
+                     marker.addTo(layer);
+                 });
+            };
+
+            data.tourists.forEach(tourist => {
+                const icon = tourist.anomaly ? criticalIcon : normalIcon;
+                const targetLayer = tourist.anomaly ? anomalyLayer : touristLayer;
+                const marker = L.marker([tourist.pos.lat, tourist.pos.lng], { icon });
+                const tooltipContent = `
+                    <div class="p-1 text-xs">
+                        <p class="font-bold text-sm text-black">${tourist.name} (${tourist.id})</p>
+                        <p class="text-gray-700">Safety Score: <span class="${tourist.safetyScore < 50 ? 'text-red-600' : 'text-green-600'} font-semibold">${tourist.safetyScore}</span></p>
+                        ${tourist.anomaly ? `<p class="font-semibold text-red-600">${tourist.anomaly}</p>`: ''}
+                    </div>`;
+                marker.bindTooltip(tooltipContent, { direction: 'top', offset: [0, -12], className: 'custom-leaflet-tooltip' });
+                marker.on('click', () => openQuickActionCard(tourist));
+                marker.addTo(targetLayer);
+                touristMarkers[tourist.id] = marker;
+            });
+
+            addMarkersToLayer(data.police, policeIcon, policeLayer, 'name');
+            addMarkersToLayer(data.hospitals, hospitalIcon, hospitalLayer, 'name');
+            addMarkersToLayer(data.cctv, cctvIcon, cctvLayer, 'name');
+            addMarkersToLayer(data.hazards, hazardIcon, hazardLayer, 'name');
+            addMarkersToLayer(data.pings, pingsIcon, pingsLayer, 'name');
+        }
+
+        // --- UI EVENT HANDLERS & FUNCTIONS ---
+        window.openFullscreenMap = (zoneName) => {
+            const zone = zones.find(z => z.name === zoneName);
+            if (!zone) return;
+            
+            document.getElementById('fullscreen-map-title').innerText = `Zone: ${zone.name}`;
+            
+            const anomaliesInZone = allZoneData[zone.id]?.tourists.filter(t => t.anomaly).length || 0;
+            const touristInZone = allZoneData[zone.id]?.tourists.length || 0;
+            
+            const anomalyCountEl = document.getElementById('anomaly-count');
+            const touristCountEl = document.getElementById('tourist-count');
+
+            anomalyCountEl.innerHTML = `<div class="w-3 h-3 rounded-full ${anomaliesInZone > 0 ? 'bg-red-500 pulsing-marker' : 'bg-slate-500'}"></div>AI Anomalies: ${anomaliesInZone}`;
+            touristCountEl.innerHTML = `<div class="w-3 h-3 rounded-full bg-green-500"></div>Active Tourists: ${touristInZone}`;
+            
+            fullscreenModal.classList.remove('hidden');
+            initializeInteractiveMap(zone.id);
+        };
+
+        document.getElementById('close-fullscreen-map').addEventListener('click', () => {
+            fullscreenModal.classList.add('hidden');
+            quickActionCard.classList.add('translate-x-full');
+            timelinePanel.classList.add('hidden');
+            if(map) { map.remove(); map = null; }
+            pauseTimeline();
+        });
+        
+        function openQuickActionCard(tourist) {
+            selectedTouristForTimeline = tourist;
+            quickActionCard.innerHTML = `
+                <button onclick="closeQuickActionCard()" aria-label="Close details panel" class="absolute top-3 right-3 p-1.5 hover:bg-slate-700 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+                <div class="flex-1 overflow-y-auto pr-2">
+                    <h3 class="text-lg font-bold">${tourist.name}</h3>
+                    <p class="text-sm text-slate-400 mb-4">Digital ID: ${tourist.id}</p>
+                    
+                    <div class="bg-slate-900 rounded-lg p-3 mb-4">
+                        <p class="text-sm font-semibold">AI Anomaly Detected:</p>
+                        <p class="text-red-400 font-bold">${tourist.anomaly || 'None'}</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 text-sm mb-4">
+                        <div class="bg-slate-900 p-2 rounded-lg">
+                            <p class="text-slate-400">Safety Score</p>
+                            <p class="font-bold text-lg ${tourist.safetyScore < 50 ? 'text-red-400' : 'text-green-400'}">${tourist.safetyScore}</p>
+                        </div>
+                        <div class="bg-slate-900 p-2 rounded-lg">
+                            <p class="text-slate-400">Last Ping</p>
+                            <p class="font-bold text-lg">${tourist.lastPing}</p>
+                        </div>
+                    </div>
+
+                    <div class="text-sm space-y-2 mb-4">
+                        <p><strong>Medical Alerts:</strong> <span class="text-yellow-400">${tourist.medical}</span></p>
+                        <p><strong>Emergency Contact:</strong> ${tourist.contacts[0] || 'Not specified'}</p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <h4 class="font-semibold">Quick Actions</h4>
+                        <button onclick="showDispatchModal('${tourist.id}')" class="w-full text-left p-3 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-3 font-semibold">Dispatch Nearest Unit</button>
+                        <button onclick="showOfflineModal()" class="w-full text-left p-3 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-3">Call / Message</button>
+                        <button onclick="showToast('Location shared with response team.')" class="w-full text-left p-3 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-3">Share Location</button>
+                        <button onclick="setupTimelinePlayback()" class="w-full text-left p-3 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-3">Play Timeline</button>
+                        <button onclick="showToast('Data Fetched.')" class="w-full text-left p-3 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-3">E-FIR Log</button>
+                    </div>
+                </div>
+                <div class="text-xs text-slate-500 mt-4 border-t border-slate-700 pt-2">Audit Trail: Logged all interactions.</div>
+            `;
+            quickActionCard.classList.remove('translate-x-full');
+        }
+
+        window.closeQuickActionCard = () => {
+            quickActionCard.classList.add('translate-x-full');
+            pauseTimeline();
+        }
+
+        // --- MODAL & TOAST CONTROLS ---
+        function showToast(message) {
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastElement.innerText = message;
+            toastElement.classList.remove('hidden', 'opacity-0', 'translate-y-2');
+
+            toastTimeout = setTimeout(() => {
+                toastElement.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toastElement.classList.add('hidden'), 300); // Hide after transition
+            }, 3000); // Display for 3 seconds
+        }
+
+        window.showDispatchModal = (touristId) => {
+            let tourist;
+            for (const zoneId in allZoneData) {
+                const found = allZoneData[zoneId].tourists.find(t => t.id === touristId);
+                if (found) { tourist = found; break; }
+            }
+            if (!tourist) return;
+            
+            const unit = communityHelpers['CH-TAW-07'];
+
+            document.getElementById('dispatch-title').innerText = `Dispatch Confirmation for ${tourist.name}`;
+            document.getElementById('dispatch-subtitle').innerText = `Confirm dispatch of nearest available unit to assist Tourist ID: ${tourist.id}.`;
+
+            modalBackdrop.classList.remove('hidden');
+            dispatchModal.classList.remove('hidden');
+            initializeDispatchMap(tourist, unit);
+        }
+        window.showOfflineModal = () => {
+            modalBackdrop.classList.remove('hidden');
+            offlineModal.classList.remove('hidden');
+        }
+        window.hideModal = () => {
+            modalBackdrop.classList.add('hidden');
+            dispatchModal.classList.add('hidden');
+            offlineModal.classList.add('hidden');
+            if(dispatchMap) { dispatchMap.remove(); dispatchMap = null; }
+        }
+        window.confirmDispatch = () => {
+            hideModal();
+            showToast('Unit CH-TAW-07 has been dispatched.');
+        }
+        
+        // --- TIMELINE CONTROLS ---
+        const timelineSlider = document.getElementById('timeline-slider');
+        const playPauseBtn = document.getElementById('timeline-play-pause');
+        const playIcon = document.getElementById('play-icon');
+        const pauseIcon = document.getElementById('pause-icon');
+
+        function setupTimelinePlayback() {
+            if (!selectedTouristForTimeline || !selectedTouristForTimeline.track || selectedTouristForTimeline.track.length === 0) {
+                showToast('No historical track data available for this tourist.');
+                return;
+            }
+            
+            const track = selectedTouristForTimeline.track;
+            timelinePanel.classList.remove('hidden');
+            document.getElementById('timeline-start-time').textContent = track[0].time.slice(0, -3);
+            document.getElementById('timeline-end-time').textContent = track[track.length - 1].time.slice(0, -3);
+            timelineSlider.max = track.length - 1;
+            timelineSlider.value = 0;
+            updateTimelineUI(0);
+        }
+
+        function playTimeline() {
+            if (timelineInterval) return; // Already playing
+            playIcon.classList.add('hidden');
+            pauseIcon.classList.remove('hidden');
+
+            timelineInterval = setInterval(() => {
+                let currentIndex = parseInt(timelineSlider.value);
+                if (currentIndex < parseInt(timelineSlider.max)) {
+                    currentIndex++;
+                    timelineSlider.value = currentIndex;
+                    updateTimelineUI(currentIndex);
+                } else {
+                    pauseTimeline(); // End of track
+                }
+            }, 1000); // Update every second
+        }
+
+        function pauseTimeline() {
+            clearInterval(timelineInterval);
+            timelineInterval = null;
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+        }
+
+        function updateTimelineUI(index) {
+            const tourist = selectedTouristForTimeline;
+            if (!tourist || !tourist.track) return;
+            
+            const trackPoint = tourist.track[index];
+            const marker = touristMarkers[tourist.id];
+            
+            if (marker && trackPoint) {
+                marker.setLatLng([trackPoint.lat, trackPoint.lng]);
+                document.getElementById('timeline-start-time').textContent = trackPoint.time.slice(0, -3);
+            }
+        }
+        
+        playPauseBtn.addEventListener('click', () => {
+            if (timelineInterval) {
+                pauseTimeline();
+            } else {
+                playTimeline();
+            }
+        });
+
+        timelineSlider.addEventListener('input', (e) => {
+            pauseTimeline();
+            updateTimelineUI(parseInt(e.target.value));
+        });
+
+        // --- LAYER TOGGLES & LAYOUT SWITCHING ---
+        function setupLayerToggles() {
+            const layerMap = {
+                'layer-tourists': touristLayer, 'layer-anomalies': anomalyLayer, 'layer-police': policeLayer,
+                'layer-hospitals': hospitalLayer, 'layer-cctv': cctvLayer, 'layer-hazards': hazardLayer, 'layer-pings': pingsLayer
+            };
+            Object.keys(layerMap).forEach(id => {
+                 document.getElementById(id).addEventListener('change', (e) => {
+                     if (!map) return;
+                     const layer = layerMap[id];
+                     e.target.checked ? map.addLayer(layer) : map.removeLayer(layer);
+                 });
+            });
+        }
+
+        const layoutButtons = document.querySelectorAll('[id^="layout-"]');
+        const mapContainer = document.getElementById('map-container');
+        const alertsContainer = document.getElementById('alert-queue-panel');
+        
+        layoutButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                layoutButtons.forEach(btn => btn.classList.replace('bg-blue-600', 'bg-slate-700'));
+                button.classList.replace('bg-slate-700', 'bg-blue-600');
+                
+                switch (button.id) {
+                    case 'layout-a':
+                        mapContainer.className = 'flex-1 rounded-xl bg-slate-800 p-4';
+                        alertsContainer.classList.add('hidden');
+                        mapGridView.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-full';
+                        populateZoneGrid();
+                        break;
+                    case 'layout-b':
+                        mapContainer.className = 'w-2/3 rounded-xl bg-slate-800 p-4';
+                        alertsContainer.classList.remove('hidden');
+                        alertsContainer.classList.add('flex');
+                        mapGridView.className = 'grid grid-cols-1 lg:grid-cols-2 gap-4 h-full';
+                        populateZoneGrid();
+                        break;
+                    case 'layout-c':
+                        mapContainer.className = 'flex-1 rounded-xl bg-slate-800 p-4';
+                        alertsContainer.classList.add('hidden');
+                        mapGridView.className = 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 h-full';
+                        populateIncidentGrid();
+                        showToast('Multi-incident grid view activated.');
+                        break;
+                }
+            });
+        });
+
+
+        // --- STARTUP ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeDashboard();
+            setupLayerToggles();
+        });
+    </script>
+</body>
+</html>
